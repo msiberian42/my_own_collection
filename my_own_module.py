@@ -32,35 +32,35 @@ author:
 '''
 
 EXAMPLES = r'''
-# Pass in a message
-- name: Test with a message
+# Создание файла с текстом
+- name: Create a file
   my_namespace.my_collection.my_test:
-    name: hello world
+    path: /tmp/example.txt
+    content: Hello, World!
 
-# pass in a message and have changed true
-- name: Test with a message and changed output
+# Создание корневых директорий
+- name: Create a file in a nested directory
   my_namespace.my_collection.my_test:
-    name: hello world
-    new: true
-
-# fail the module
-- name: Test failure of the module
-  my_namespace.my_collection.my_test:
-    name: fail me
+    path: /tmp/example/example.txt
+    content: Hello, World!
 '''
 
 RETURN = r'''
-# These are examples of possible return values, and in general should use other names for return values.
-original_message:
-    description: The original name param that was passed in.
+changed:
+    description: Whether the file was created or its content changed.
+    type: bool
+    returned: always
+    sample: true
+Path:
+    description: The path of the file.
     type: str
     returned: always
-    sample: 'hello world'
-message:
-    description: The output message that the test module generates.
+    sample: /tmp/example.txt
+Content:
+    description: The content for the file.
     type: str
     returned: always
-    sample: 'goodbye'
+    sample: Hello, Ansible!
 '''
 
 from ansible.module_utils.basic import AnsibleModule
@@ -87,10 +87,11 @@ def run_module():
     def state_is_current() -> bool:
         p = Path(module.params['path'])
 
-        if p.is_file() and p.read_text(encoding="utf-8") ==  module.params['content']:
-            return True
-
-        return False
+        if not p.exists():
+            return False
+        if not p.is_file():
+            raise OSError('Это не файл')
+        return p.read_text(encoding="utf-8") == module.params['content']
 
     def change_file():
         p = Path(module.params['path'])
@@ -98,15 +99,22 @@ def run_module():
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(module.params['content'], encoding="utf-8")
 
-    result['changed'] = not state_is_current()
     result['Path'] = module.params['path']
     result['Content'] = module.params['content']
+
+    try:
+        result['changed'] = not state_is_current()
+    except (OSError, UnicodeError) as e:
+        module.fail_json(msg='Невозможно проверить файл {0}: {1}'.format(module.params['path'], e), **result)
 
     if module.check_mode:
         module.exit_json(**result)
 
     if result['changed']:
-        change_file()
+        try:
+            change_file()
+        except OSError as e:
+            module.fail_json(msg='Unable to write file {0}: {1}'.format(module.params['path'], e), **result)
 
     module.exit_json(**result)
 
