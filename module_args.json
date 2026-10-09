@@ -1,0 +1,6 @@
+{
+  "ANSIBLE_MODULE_ARGS": {
+    "path": "/tmp/my_own_module_test.txt",
+    "content": "Проверка локально"
+  }
+}
