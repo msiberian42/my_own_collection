@@ -14,16 +14,15 @@ version_added: "1.0.0"
 description: This is my longer description explaining my test module.
 
 options:
-    name:
-        description: This is the message to send to the test module.
+    path:
+        description: Path.
         required: true
         type: str
-    new:
+    content:
         description:
-            - Control to demo if the result of this module is changed or not.
-            - Parameter description can be a list as well.
+           Content.
         required: false
-        type: bool
+        type: str
 
 extends_documentation_fragment:
     - my_namespace.my_collection.my_doc_fragment_name
@@ -65,18 +64,19 @@ message:
 '''
 
 from ansible.module_utils.basic import AnsibleModule
+from pathlib import Path
 
 
 def run_module():
     module_args = dict(
-        name=dict(type='str', required=True),
-        new=dict(type='bool', required=False, default=False)
+        path=dict(type='str', required=True),
+        content=dict(type='str', required=False, default='Default Content')
     )
 
     result = dict(
         changed=False,
-        original_message='',
-        message=''
+        Path='',
+        Content=''
     )
 
     module = AnsibleModule(
@@ -84,17 +84,29 @@ def run_module():
         supports_check_mode=True
     )
 
+    def state_is_current() -> bool:
+        p = Path(module.params['path'])
+
+        if p.is_file() and p.read_text(encoding="utf-8") ==  module.params['content']:
+            return True
+
+        return False
+
+    def change_file():
+        p = Path(module.params['path'])
+
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(module.params['content'], encoding="utf-8")
+
+    result['changed'] = not state_is_current()
+    result['Path'] = module.params['path']
+    result['Content'] = module.params['content']
+
     if module.check_mode:
         module.exit_json(**result)
 
-    result['original_message'] = module.params['name']
-    result['message'] = 'goodbye'
-
-    if module.params['new']:
-        result['changed'] = True
-
-    if module.params['name'] == 'fail me':
-        module.fail_json(msg='You requested this to fail', **result)
+    if result['changed']:
+        change_file()
 
     module.exit_json(**result)
 
