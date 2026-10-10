@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  author: pavel
+  role_name: single_task_role
+  description: Create file with text
+  min_ansible_version: "2.20.1"
+
+dependencies: []
