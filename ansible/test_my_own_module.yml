@@ -1,0 +1,10 @@
+- name: Test my_own_module
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Create file
+      my_own_module:
+        path: /tmp/ansible-module-test.txt
+        content: "Проверка модуля"
