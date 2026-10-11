@@ -1,0 +1,52 @@
+---
+- name: Test Yandex Cloud instance module
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vm_name: ansible-vm
+    vm_user: pavel
+    vm_ssh_public_key: >-
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMTNauqiksSCuDANOM7MUXSOfs2NnOzNUTrD7ZkDnYr0 pavel@MSiberian
+    vm_user_data: |
+      #cloud-config
+      datasource:
+        Ec2:
+          strict_id: false
+      ssh_pwauth: no
+      users:
+        - name: {{ vm_user }}
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          ssh_authorized_keys:
+            - {{ vm_ssh_public_key }}
+
+  tasks:
+    - name: Create the test VM
+      my_own_namespace.yandex_cloud_elk.yc_instance:
+        name: "{{ vm_name }}"
+        hostname: "{{ vm_name }}"
+        zone: ru-central1-a
+        platform: standard-v3
+        memory: 8
+        cores: 2
+        core_fraction: 50
+        boot_disk_name: disk-ubuntu-24-04-lts-1791608536901
+        boot_disk_type: network-hdd
+        boot_disk_size: 10
+        boot_disk_block_size: 4096
+        boot_disk_image_id: fd8luhgf9o8h5vli509b
+        boot_disk_auto_delete: true
+        subnet_id: e9b4o9p3a9ack48k46at
+        nat_ip_version: ipv4
+        ipv4_address: auto
+        preemptible: true
+        user_data: "{{ vm_user_data }}"
+        ssh_keys: "{{ vm_user }}:{{ vm_ssh_public_key }}"
+        private_ui_created_from: console
+      register: yc_vm_result
+
+    - name: Show the module result
+      ansible.builtin.debug:
+        var: yc_vm_result
