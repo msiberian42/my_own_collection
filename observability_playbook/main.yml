@@ -1,0 +1,157 @@
+---
+- name: Create observability VMs in Yandex Cloud
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    vm_user: pavel
+    vm_ssh_public_key: >-
+      ssh-ed25519 YOUR_PUBLIC_SSH user@mail
+    vm_ssh_private_key_file: "{{ lookup('ansible.builtin.env', 'HOME') }}/.ssh/id_ed25519"
+    yc_executable: yc
+
+    vm_user_data: |
+      #cloud-config
+      datasource:
+        Ec2:
+          strict_id: false
+      ssh_pwauth: no
+      users:
+        - name: {{ vm_user }}
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          ssh_authorized_keys:
+            - {{ vm_ssh_public_key }}
+
+    observability_vms:
+      - service_group: clickhouse
+        inventory_name: obs-clickhouse
+        hostname: obs-clickhouse
+        boot_disk_name: disk-obs-clickhouse
+      - service_group: vector
+        inventory_name: obs-vector
+        hostname: obs-vector
+        boot_disk_name: disk-obs-vector
+      - service_group: lighthouse
+        inventory_name: obs-lighthouse
+        hostname: obs-lighthouse
+        boot_disk_name: disk-obs-lighthouse
+
+    yc_vm_defaults:
+      zone: ru-central1-a
+      platform: standard-v3
+      memory: 8
+      cores: 2
+      core_fraction: 50
+      boot_disk_type: network-hdd
+      boot_disk_size: 10
+      boot_disk_block_size: 4096
+      boot_disk_image_id: fd8luhgf9o8h5vli509b
+      boot_disk_auto_delete: true
+      subnet_id: e9b4o9p3a9ack48k46at
+      nat_ip_version: ipv4
+      ipv4_address: auto
+      preemptible: true
+
+  tasks:
+    - name: Ensure the three service roles have been installed
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/roles/{{ item }}/tasks/main.yml"
+      loop:
+        - clickhouse
+        - vector
+        - lighthouse
+      register: service_role_files
+
+    - name: Stop before provisioning if an Ansible role is missing
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: >-
+          Role '{{ item.item }}' is missing. Set its repository and tag in
+          requirements.yml, then run ansible-galaxy role install -r
+          requirements.yml -p roles.
+      loop: "{{ service_role_files.results }}"
+
+    - name: Create one VM for each observability service
+      yc_instance:
+        name: "{{ item.inventory_name }}"
+        hostname: "{{ item.hostname }}"
+        zone: "{{ yc_vm_defaults.zone }}"
+        platform: "{{ yc_vm_defaults.platform }}"
+        memory: "{{ yc_vm_defaults.memory }}"
+        cores: "{{ yc_vm_defaults.cores }}"
+        core_fraction: "{{ yc_vm_defaults.core_fraction }}"
+        boot_disk_name: "{{ item.boot_disk_name }}"
+        boot_disk_type: "{{ yc_vm_defaults.boot_disk_type }}"
+        boot_disk_size: "{{ yc_vm_defaults.boot_disk_size }}"
+        boot_disk_block_size: "{{ yc_vm_defaults.boot_disk_block_size }}"
+        boot_disk_image_id: "{{ yc_vm_defaults.boot_disk_image_id }}"
+        boot_disk_auto_delete: "{{ yc_vm_defaults.boot_disk_auto_delete }}"
+        subnet_id: "{{ yc_vm_defaults.subnet_id }}"
+        nat_ip_version: "{{ yc_vm_defaults.nat_ip_version }}"
+        ipv4_address: "{{ yc_vm_defaults.ipv4_address }}"
+        preemptible: "{{ yc_vm_defaults.preemptible }}"
+        user_data: "{{ vm_user_data }}"
+        ssh_keys: "{{ vm_user }}:{{ vm_ssh_public_key }}"
+        yc_path: "{{ yc_executable }}"
+      loop: "{{ observability_vms }}"
+
+    - name: Get VM network addresses
+      ansible.builtin.command:
+        argv:
+          - "{{ yc_executable }}"
+          - compute
+          - instance
+          - get
+          - "{{ item.inventory_name }}"
+          - --format
+          - json
+      loop: "{{ observability_vms }}"
+      register: vm_details
+      changed_when: false
+
+    - name: Add VMs to the runtime inventory
+      ansible.builtin.add_host:
+        name: "{{ item.item.inventory_name }}"
+        ansible_host: >-
+          {{ (item.stdout | from_json).network_interfaces[0].primary_v4_address.one_to_one_nat.address }}
+        ansible_user: "{{ vm_user }}"
+        ansible_ssh_private_key_file: "{{ vm_ssh_private_key_file }}"
+        groups: "observability,{{ item.item.service_group }}"
+      loop: "{{ vm_details.results }}"
+
+- name: Wait for the new VMs to accept SSH connections
+  hosts: observability
+  gather_facts: false
+  tasks:
+    - name: Wait until SSH is ready
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        sleep: 5
+        timeout: 600
+
+- name: Install ClickHouse
+  hosts: clickhouse
+  become: true
+  tasks:
+    - name: Apply the ClickHouse role
+      ansible.builtin.include_role:
+        name: clickhouse
+
+- name: Install Vector
+  hosts: vector
+  become: true
+  tasks:
+    - name: Apply the Vector role
+      ansible.builtin.include_role:
+        name: vector
+
+- name: Install Lighthouse
+  hosts: lighthouse
+  become: true
+  tasks:
+    - name: Apply the Lighthouse role
+      ansible.builtin.include_role:
+        name: lighthouse

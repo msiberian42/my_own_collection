@@ -1,0 +1,16 @@
+---
+roles:
+  - name: clickhouse
+    src: https://github.com/msiberian42/clickhouse-role.git
+    scm: git
+    version: "1.0"
+
+  - name: vector
+    src: https://github.com/msiberian42/vector-role.git
+    scm: git
+    version: "1.3"
+
+  - name: lighthouse
+    src: https://github.com/msiberian42/lighthouse-role.git
+    scm: git
+    version: "1.1"
