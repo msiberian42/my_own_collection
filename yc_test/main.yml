@@ -24,7 +24,7 @@
 
   tasks:
     - name: Create the test VM
-      my_own_namespace.yandex_cloud_elk.yc_instance:
+      yc_instance:
         name: "{{ vm_name }}"
         hostname: "{{ vm_name }}"
         zone: ru-central1-a

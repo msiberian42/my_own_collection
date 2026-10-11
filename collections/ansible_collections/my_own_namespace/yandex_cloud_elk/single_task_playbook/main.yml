@@ -1,7 +1,0 @@
-- name: Test my_own_module
-  hosts: localhost
-  connection: local
-  gather_facts: false
-
-  roles:
-    - my_own_namespace.yandex_cloud_elk.single_task_role

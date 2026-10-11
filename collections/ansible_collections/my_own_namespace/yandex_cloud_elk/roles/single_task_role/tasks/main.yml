@@ -1,5 +1,0 @@
----
-- name: Create file
-  my_own_namespace.yandex_cloud_elk.my_own_module:
-    path: "{{ single_task_role_path }}"
-    content: "{{ single_task_role_content }}"
